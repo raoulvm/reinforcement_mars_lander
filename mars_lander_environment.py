@@ -10,11 +10,31 @@ State Vector
 ------------
 
 The coordinates are the first two numbers in the state vector.
-
+        state = [
+            # SkyCrane Data
+            x,              #0  -100%...100%
+            y,              #1 -100%...100%
+            velocity.x,     #2
+            velocity.y, #   3
+            skycrane.angle, #4
+            angularVelocity, #5
+            # Lander Data
+            legs[0].ground_contact , #6
+            legs[1].ground_contact,  #7
+            pos_lander.x ,  #8
+            pos_lander.y ,  #9
+            vel_lander.x,   #10
+            vel_lander.y,   #11
+            lander.angle,   #12
+            lander.angularVelocity, #13
+            tether_connected,       #14
+        ]
 
 Action
 ------
 Nop, fire left engine, main engine, right engine, release tether
+
+release_tether is dependent on tether_action=True in MarsLander.__init__()
 
 
 Reward for moving from the top of the screen to the landing pad and zero speed is about 100..140 points.
@@ -420,15 +440,17 @@ class MarsLander(gym.Env, EzPickle):
             (pos_lander.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_H/SCALE/2), #9
             vel_lander.x*(VIEWPORT_W/SCALE/2)/FPS, #10
             vel_lander.y*(VIEWPORT_H/SCALE/2)/FPS, #11
-            self.skycrane.angle, #12
-            20.0*self.skycrane.angularVelocity/FPS,     #13
+            self.lander.angle, #12
+            20.0*self.lander.angularVelocity/FPS,     #13
             self.tether_connected,       #14
         ]
         assert len(state) == 15
         reward = 0
         shaping = ( - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore # penalty for distance from helipad 
             - 100*np.sqrt(state[10]*state[10] + state[11]*state[11]) #type:ignore # penalty for speed 
-            - 100*abs(state[4]) + 10*state[6] + 10*state[7]  )       #penalty for angle, reward for leg ground contacts
+            - 100*abs(state[4]) + 10*state[6] + 10*state[7]         #penalty for angle, reward for leg ground contacts
+            - 100*abs(state[12])                                    # penalty for lander angle
+            )
 
             # And ten points for legs contact, the idea is if you
             # lose contact again after landing, you get negative reward

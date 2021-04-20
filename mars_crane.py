@@ -1,3 +1,20 @@
+"""
+MarsLander simulates a sky crane landing on Mars
+
+Based on the Lunar Lander (https://github.com/fakemonk1/Reinforcement-Learning-Lunar_Lander)
+
+
+
+
+
+Screencasting: 
+ffmpeg -f x11grab -show_region 1 -r 25 -s 600x400 -i :1+75,55 -c:v libx264 screencast.mp4
+
+"""
+
+
+
+
 import gym
 import numpy as np
 import pandas as pd
@@ -140,10 +157,10 @@ class DQN:
         self.model.save(name)
 
 
-def test_already_trained_model(trained_model):
+def test_already_trained_model(trained_model, env):
     rewards_list = []
     num_test_episode = 100
-    env = gym.make("LunarLander-v2")
+    #env = gym.make("LunarLander-v2")
     print("Starting Testing of the trained model...")
 
     step_count = 1000
@@ -169,7 +186,7 @@ def test_already_trained_model(trained_model):
 
 
 def plot_df(df, chart_name, title, x_axis_label, y_axis_label):
-    plt.rcParams.update({'font.size': 17})
+    plt.rcParams.update({'font.size': 17}) #type:ignore
     df['rolling_mean'] = df[df.columns[0]].rolling(100).mean()
     plt.figure(figsize=(15, 8))
     plt.close()
@@ -186,7 +203,7 @@ def plot_df(df, chart_name, title, x_axis_label, y_axis_label):
 
 def plot_df2(df, chart_name, title, x_axis_label, y_axis_label):
     df['mean'] = df[df.columns[0]].mean()
-    plt.rcParams.update({'font.size': 17})
+    plt.rcParams.update({'font.size': 17}) # type:ignore
     plt.figure(figsize=(15, 8))
     plt.close()
     plt.figure()
@@ -229,13 +246,13 @@ if __name__ == '__main__':
 
     # plot reward in graph
     reward_df = pd.DataFrame(rewards_list)
-    plot_df(reward_df, "Figure 1: Reward for each training episode", "Reward for each training episode", "Episode","Reward")
+    plot_df(reward_df, "Figure 1- Reward for each training episode", "Reward for each training episode", "Episode","Reward")
 
     # Test the model
     trained_model = load_model(save_dir + "trained_model.h5")
-    test_rewards = test_already_trained_model(trained_model)
+    test_rewards = test_already_trained_model(trained_model, env)
     pickle.dump(test_rewards, open(save_dir + "test_rewards.p", "wb"))
     test_rewards = pickle.load(open(save_dir + "test_rewards.p", "rb"))
 
-    plot_df2(pd.DataFrame(test_rewards), "Figure 2: Reward for each testing episode","Reward for each testing episode", "Episode", "Reward")
+    plot_df2(pd.DataFrame(test_rewards), "Figure 2- Reward for each testing episode","Reward for each testing episode", "Episode", "Reward")
     print("Training and Testing Completed...!")
