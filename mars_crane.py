@@ -12,10 +12,7 @@ ffmpeg -f x11grab -show_region 1 -r 25 -s 600x400 -i :1+75,55 -c:v libx264 scree
 
 """
 
-
-
-
-import gym
+# import gym - not used any more, uses: from mars_lander_environment import MarsLander
 import numpy as np
 import pandas as pd
 from collections import deque

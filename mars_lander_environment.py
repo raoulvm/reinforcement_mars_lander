@@ -32,7 +32,11 @@ The coordinates are the first two numbers in the state vector.
 
 Action
 ------
-Nop, fire left engine, main engine, right engine, release tether
+0   Nop, 
+1   fire left engine, 
+2   main engine, 
+3   right engine, 
+4   release tether
 
 release_tether is dependent on tether_action=True in MarsLander.__init__()
 
@@ -52,6 +56,7 @@ BASED ON
 
 LunarLander-v2
 Created by Oleg Klimov. Licensed on the same terms as the rest of OpenAI Gym.
+Copied from openai.gym
 """
 
 
