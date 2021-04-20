@@ -56,7 +56,8 @@ class DQN:
         model = Sequential()
         model.add(Dense(1024, input_dim=self.num_observation_space, activation=relu))
         model.add(Dense(512, activation=relu))
-        model.add(Dense(self.num_action_space, activation=linear))
+        model.add(Dense(128, activation=relu))
+        model.add(Dense(self.num_action_space, activation='softmax'))
 
         # Compile the model
         model.compile(loss=mean_squared_error,optimizer=Adam(lr=self.lr))
