@@ -474,14 +474,14 @@ class MarsLander(gym.Env, EzPickle):
         if self.game_over or abs(state[0]) >= 1.0:
             done = True
             reward = -100
-            print('Terminal velocity:', state[11])
+            #print('Terminal velocity:', state[11])
             # if abs(state[11])>1e-10:
             #     reward += -200
         if not self.lander.awake:
             done = True
             reward = +100
             print('Landing Award granted')
-            print('Terminal velocity:', state[11])
+            #print('Terminal velocity:', state[11])
         return np.array(state, dtype=np.float32), reward, done, {}
 
     def render(self, mode='human'):
