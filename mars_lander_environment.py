@@ -32,11 +32,14 @@ The coordinates are the first two numbers in the state vector.
 
 Action
 ------
-0   Nop, 
-1   fire left engine, 
-2   main engine, 
-3   right engine, 
-4   release tether
+OUTSIDE ENGINES BRANCH - The mars sky crane had downward directed side thrusters only
+
+0 No operation
+1 Fire left engine full
+2 Fire both engines half
+3 Fire right engine full
+4 release tether
+
 
 release_tether is dependent on tether_action=True in MarsLander.__init__()
 
@@ -60,7 +63,7 @@ Copied from openai.gym
 """
 
 
-import sys, math
+import math
 import numpy as np
 
 import Box2D
@@ -75,10 +78,10 @@ from gym.utils import seeding, EzPickle
 FPS = 50
 SCALE = 30.0   # affects how fast-paced the game is, forces should be adjusted as well
 
-MAIN_ENGINE_POWER = 13.0
-SIDE_ENGINE_POWER = 0.6
+FULL_ENGINE_POWER = 26.0 # single engine thrust
+HALF_ENGINE_POWER = 26.0   # both engines, each. not really linear here
 
-INITIAL_RANDOM = 500.0   # Set 1500 to make game harder
+INITIAL_RANDOM = 700.0   # Set 1500 to make game harder
 
 LANDER_POLY =[
     (-14, +17), (-17, 0), (-17 ,-10),
@@ -91,12 +94,13 @@ LEG_SPRING_TORQUE = 30
 
 TETHER_LENGTH = 64
 SKYCRANE_POLY =[
-    (-24, +17), (-34, 0), (-34 ,-10),
-    (+34, -10), (+34, 0), (+24, +17)
+    (-24, +10), (-34, 0), (-34 ,-10),
+    (+34, -10), (+34, 0), (+24, +10)
     ]
 
-SIDE_ENGINE_HEIGHT = 14.0
-SIDE_ENGINE_AWAY = 12.0
+SIDE_ENGINE_HEIGHT = 10.0 # POSITIVE IS DOWN???
+SIDE_ENGINE_AWAY = 34.0
+SIDE_ENGINE_ANGLE = 15*(math.pi*2/360) # from y-Axis outwards
 
 VIEWPORT_W = 600
 VIEWPORT_H = 400
@@ -140,6 +144,14 @@ class MarsLander(gym.Env, EzPickle):
         'video.frames_per_second' : FPS
     }
 
+    actions_dict = {
+        0: 'No operation',
+        1: 'Fire left engine full',
+        2: 'Fire both engines half',
+        3: 'Fire right engine full',
+        4: 'release tether',
+    }
+
     continuous = False
 
     def __init__(self, gravitympss:float=3.721, tether_action:bool=False):
@@ -166,10 +178,8 @@ class MarsLander(gym.Env, EzPickle):
             self.action_space = spaces.Box(-1, +1, (2,), dtype=np.float32)
         else:
             if tether_action:
-                # Nop, fire left engine, main engine, right engine, release tether
                 self.action_space = spaces.Discrete(5)
             else:
-                # Nop, fire left engine, main engine, right engine
                 self.action_space = spaces.Discrete(4)
 
         self.reset()
@@ -228,7 +238,7 @@ class MarsLander(gym.Env, EzPickle):
                 friction=0.1)
             self.sky_polys.append([p1, p2, (p2[0], H), (p1[0], H)])
 
-        self.moon.color1 = (0.0, 0.0, 0.0)
+        self.moon.color1 = (0.5, 0.0, 0.0)
         self.moon.color2 = (0.5, 0.0, 0.0)
 
 
@@ -257,7 +267,7 @@ class MarsLander(gym.Env, EzPickle):
             self.np_random.uniform(-INITIAL_RANDOM, INITIAL_RANDOM),
             self.np_random.uniform(-INITIAL_RANDOM, INITIAL_RANDOM)
             )
-
+        #print('initial angle', self.skycrane.angle)
         self.skycrane.ApplyForceToCenter( initial_force_applied , True)
 
         ########################
@@ -288,6 +298,7 @@ class MarsLander(gym.Env, EzPickle):
                     shape=polygonShape(box=(LEG_W/SCALE, LEG_H/SCALE)),
                     density=1.0,
                     restitution=0.0,
+                    friction=0.8,
                     categoryBits=0x0010,
                     maskBits=0x0011)
                 )
@@ -362,54 +373,117 @@ class MarsLander(gym.Env, EzPickle):
             assert self.action_space.contains(action), "%r (%s) invalid " % (action, type(action))
 
         # Engines
-        tip  = (math.sin(self.skycrane.angle), math.cos(self.skycrane.angle))
-        side = (-tip[1], tip[0])
+
         dispersion = [self.np_random.uniform(-1.0, +1.0) / SCALE for _ in range(2)]
 
         m_power = 0.0
-        if (self.continuous and action[0] > 0.0) or (not self.continuous and action == 2):
-            # Main engine
+        # 0 No operation
+        # 1 Fire left engine full
+        # 2 Fire both engines half
+        # 3 Fire right engine full
+        # 4 release tether
+
+        sincos  = (math.sin(self.skycrane.angle), math.cos(self.skycrane.angle))
+        #side = (-sincos[1], sincos[0])
+
+        thruster_angles = [
+            self.skycrane.angle+math.pi/2 - SIDE_ENGINE_ANGLE,
+            self.skycrane.angle+math.pi/2 + SIDE_ENGINE_ANGLE
+        ]
+
+        thruster_vec = [
+            [math.cos(thruster_angles[0])/SCALE, math.sin(thruster_angles[0])/SCALE],
+            [math.cos(thruster_angles[1])/SCALE, math.sin(thruster_angles[1])/SCALE],
+        ]
+        if (self.continuous and action[0] > 0.0) or (not self.continuous and action in [1,2,3]):
+            # was: Main engine
+            # Fire both engines half
+
+
+            # thruster positions
+            # x = 
+            # self.skycrane.position[0] # x in the middle of the ship
+            #   +- SIDE_ENGINE_AWAY *cos(sc.angle) # depend on thruster side
+            #   + SIDE_ENGINE_HEIGHT *sin(sc.angle)
+            # y=
+            # self.skycrane.position[1]
+            #   +- SIDE_ENGINE_AWAY * -sin(sc.angle)
+            #   + SIDE_ENGINE_HEIGHT *cos(sc.angle)
+
+            # thruster directions
+            # self.skycrane.angle+pi/2 -/+ SIDE_ENGINE_ANGLE
+
+
+
             if self.continuous:
                 m_power = (np.clip(action[0], 0.0,1.0) + 1.0)*0.5   # 0.5..1.0
                 assert m_power >= 0.5 and m_power <= 1.0
             else:
-                m_power = 1.0
-            ox = (tip[0] * (4/SCALE + 2 * dispersion[0]) +
-                  side[0] * dispersion[1])  # 4 is move a bit downwards, +-2 for randomness
-            oy = -tip[1] * (4/SCALE + 2 * dispersion[0]) - side[1] * dispersion[1]
-            impulse_pos = (self.skycrane.position[0] + ox, self.skycrane.position[1] + oy)
-            p = self._create_particle(3.5,  # 3.5 is here to make particle speed adequate
-                                      impulse_pos[0],
-                                      impulse_pos[1],
-                                      m_power)  # particles are just a decoration
-            p.ApplyLinearImpulse((ox * MAIN_ENGINE_POWER * m_power, oy * MAIN_ENGINE_POWER * m_power),
-                                 impulse_pos,
-                                 True)
-            self.skycrane.ApplyLinearImpulse((-ox * MAIN_ENGINE_POWER * m_power, -oy * MAIN_ENGINE_POWER * m_power),
-                                           impulse_pos,
-                                           True)
+                if action == 2:
+                    m_power = 1.0 * HALF_ENGINE_POWER/FULL_ENGINE_POWER
+                else:
+                    m_power = 1.0 # FULL POWER
+
+            # ox,oy = Offset X, Y
+            # engine 1
+            ox1 = (sincos[0] * (SIDE_ENGINE_HEIGHT/SCALE + 1 * dispersion[0]) +
+                  sincos[1] * (-SIDE_ENGINE_AWAY/SCALE + 1* dispersion[1]))  
+            oy1 = -(sincos[1] * (SIDE_ENGINE_HEIGHT/SCALE + 1 * dispersion[0]) - 
+                  sincos[0] * (-SIDE_ENGINE_AWAY/SCALE + dispersion[1]))
+            # engline 2
+            ox2 = (sincos[0] * (SIDE_ENGINE_HEIGHT/SCALE + 1 * dispersion[0]) +
+                  sincos[1] * (SIDE_ENGINE_AWAY/SCALE + 1* dispersion[1]))  
+            oy2 = -(sincos[1] * (SIDE_ENGINE_HEIGHT/SCALE + 1 * dispersion[0]) - 
+                  sincos[0] * (SIDE_ENGINE_AWAY/SCALE + dispersion[1]))
+
+            impulse_pos1 = (
+                self.skycrane.position[0] + ox1, 
+                self.skycrane.position[1] + oy1
+                )
+            impulse_pos2 = (
+                self.skycrane.position[0] + ox2, 
+                self.skycrane.position[1] + oy2
+                )
+            if action in [1,2]:
+                p1 = self._create_particle(3.5,  # 3.5 is here to make particle speed adequate
+                                        impulse_pos1[0],
+                                        impulse_pos1[1],
+                                        m_power)  # particles are just a decoration
+            else:
+                p1 = None
+            if action in [2,3]:
+                p2 = self._create_particle(3.5,  # 3.5 is here to make particle speed adequate
+                                impulse_pos2[0],
+                                impulse_pos2[1],
+                                m_power)  # particles are just a decoration
+            else:
+                p2 = None
+
+            for ox, oy, p,impulse_pos, thrust_vec in zip(
+                [ox1,ox1],
+                [oy1,oy2],
+                [p1,p2],
+                [impulse_pos1, impulse_pos2], 
+                thruster_vec):
+                if not p is None: # only fire engines activated with particles
+                    p.ApplyLinearImpulse(
+                        # impulse vector
+                        ( 
+                            -thrust_vec[0] * FULL_ENGINE_POWER * m_power, 
+                            -thrust_vec[1] * FULL_ENGINE_POWER * m_power,
+                            ),
+                        impulse_pos,
+                        True
+                    )
+                    self.skycrane.ApplyLinearImpulse(
+                        (
+                            thrust_vec[0] * FULL_ENGINE_POWER * m_power, 
+                            thrust_vec[1] * FULL_ENGINE_POWER * m_power,),
+                        impulse_pos,
+                        True,
+                    )
 
         s_power = 0.0
-        if (self.continuous and np.abs(action[1]) > 0.5) or (not self.continuous and action in [1, 3]):
-            # Orientation engines
-            if self.continuous:
-                direction = np.sign(action[1])
-                s_power = np.clip(np.abs(action[1]), 0.5, 1.0)
-                assert s_power >= 0.5 and s_power <= 1.0
-            else:
-                direction = action-2
-                s_power = 1.0
-            ox = tip[0] * dispersion[0] + side[0] * (3 * dispersion[1] + direction * SIDE_ENGINE_AWAY/SCALE) #type:ignore
-            oy = -tip[1] * dispersion[0] - side[1] * (3 * dispersion[1] + direction * SIDE_ENGINE_AWAY/SCALE) #type:ignore
-            impulse_pos = (self.skycrane.position[0] + ox - tip[0] * 17/SCALE,
-                           self.skycrane.position[1] + oy + tip[1] * SIDE_ENGINE_HEIGHT/SCALE)
-            p = self._create_particle(0.7, impulse_pos[0], impulse_pos[1], s_power)
-            p.ApplyLinearImpulse((ox * SIDE_ENGINE_POWER * s_power, oy * SIDE_ENGINE_POWER * s_power),
-                                 impulse_pos
-                                 , True)
-            self.skycrane.ApplyLinearImpulse((-ox * SIDE_ENGINE_POWER * s_power, -oy * SIDE_ENGINE_POWER * s_power),
-                                           impulse_pos,
-                                           True)
         tether_abuse = False
         if not self.continuous and action==4: 
             # RELEASE TETHER
@@ -430,17 +504,14 @@ class MarsLander(gym.Env, EzPickle):
         state = [
             # SkyCrane Data
             (pos.x - VIEWPORT_W/SCALE/2) / (VIEWPORT_W/SCALE/2), #0
-            (pos.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_H/SCALE/2), #1
+            (pos.y - (self.helipad_y+(LEG_DOWN+TETHER_LENGTH*1.1)/SCALE)) / (VIEWPORT_H/SCALE/2), #1
             vel.x*(VIEWPORT_W/SCALE/2)/FPS, #2
             vel.y*(VIEWPORT_H/SCALE/2)/FPS, #3
             self.skycrane.angle, #4
             20.0*self.skycrane.angularVelocity/FPS, #5
             # Lander Data
             1.0 if self.legs[0].ground_contact else 0.0, #6
-            1.0 if self.legs[1].ground_contact else 0.0 #7
-            ]
-        assert len(state) == 8
-        state += [
+            1.0 if self.legs[1].ground_contact else 0.0, #7
             (pos_lander.x - VIEWPORT_W/SCALE/2) / (VIEWPORT_W/SCALE/2), #8
             (pos_lander.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_H/SCALE/2), #9
             vel_lander.x*(VIEWPORT_W/SCALE/2)/FPS, #10
@@ -451,10 +522,15 @@ class MarsLander(gym.Env, EzPickle):
         ]
         assert len(state) == 15
         reward = 0
-        shaping = ( - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore # penalty for distance from helipad 
+        shaping = ( 
+            - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore # penalty for distance from helipad 
             - 100*np.sqrt(state[10]*state[10] + state[11]*state[11]) #type:ignore # penalty for speed 
-            - 100*abs(state[4]) + 10*state[6] + 10*state[7]         #penalty for angle, reward for leg ground contacts
-            - 100*abs(state[12])                                    # penalty for lander angle
+            -  50*abs(state[4])  # penalty for skycrane angle
+            + 10*state[6]        # reward for leg ground contacts
+            + 10*state[7]        # reward for leg ground contacts
+            - 70*abs(state[12]) # penalty for lander angle
+            - 50*abs(state[13]) # penalty for lander rotational speed
+            - 50*np.sqrt(state[0]*state[0] + state[1]*state[1]) #type:ignore # penalty for skycrane distance from screen center
             )
 
             # And ten points for legs contact, the idea is if you
@@ -463,7 +539,7 @@ class MarsLander(gym.Env, EzPickle):
             reward = shaping - self.prev_shaping
         self.prev_shaping = shaping
 
-        reward -= m_power*0.30  # less fuel spent is better, about -30 for heuristic landing
+        reward -= m_power*0.10  # less fuel spent is better, about -30 for heuristic landing
         reward -= s_power*0.03
         
         reward += -5*tether_abuse # penalty for releasing tether before lander is on ground
@@ -471,17 +547,17 @@ class MarsLander(gym.Env, EzPickle):
 
 
         done = False
-        if self.game_over or abs(state[0]) >= 1.0:
+        if self.game_over or abs(state[8]) >= 1.0: # sudden flay-away: if the lander is off-screen
             done = True
             reward = -100
-            print('Terminal velocity:', state[11])
+            #print('Terminal velocity:', state[11])
             # if abs(state[11])>1e-10:
             #     reward += -200
         if not self.lander.awake:
             done = True
             reward = +100
             print('Landing Award granted')
-            print('Terminal velocity:', state[11])
+            #print('Terminal velocity:', state[11])
         return np.array(state, dtype=np.float32), reward, done, {}
 
     def render(self, mode='human'):
