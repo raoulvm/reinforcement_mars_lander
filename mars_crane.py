@@ -46,7 +46,7 @@ class DQN:
         self.rewards_list = []
 
         self.replay_memory_buffer = deque(maxlen=500000)
-        self.batch_size = 64
+        self.batch_size = 256 #64
         self.epsilon_min = 0.01
         self.num_action_space = self.action_space.n
         self.num_observation_space = env.observation_space.shape[0]
@@ -54,10 +54,9 @@ class DQN:
 
     def initialize_model(self):
         model = Sequential()
-        model.add(Dense(1024, input_dim=self.num_observation_space, activation=relu))
-        model.add(Dense(512, activation=relu))
-        model.add(Dense(128, activation=relu))
-        model.add(Dense(self.num_action_space, activation='softmax'))
+        model.add(Dense(512, input_dim=self.num_observation_space, activation=relu))
+        model.add(Dense(256, activation=relu))
+        model.add(Dense(self.num_action_space, activation='linear'))
 
         # Compile the model
         model.compile(loss=mean_squared_error,optimizer=Adam(lr=self.lr))

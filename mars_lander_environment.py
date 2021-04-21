@@ -79,9 +79,9 @@ FPS = 50
 SCALE = 30.0   # affects how fast-paced the game is, forces should be adjusted as well
 
 FULL_ENGINE_POWER = 26.0 # single engine thrust
-HALF_ENGINE_POWER = 20.0   # both engines, each. not really linear here
+HALF_ENGINE_POWER = 26.0   # both engines, each. not really linear here
 
-INITIAL_RANDOM = 500.0   # Set 1500 to make game harder
+INITIAL_RANDOM = 700.0   # Set 1500 to make game harder
 
 LANDER_POLY =[
     (-14, +17), (-17, 0), (-17 ,-10),
@@ -298,6 +298,7 @@ class MarsLander(gym.Env, EzPickle):
                     shape=polygonShape(box=(LEG_W/SCALE, LEG_H/SCALE)),
                     density=1.0,
                     restitution=0.0,
+                    friction=0.8,
                     categoryBits=0x0010,
                     maskBits=0x0011)
                 )
@@ -503,7 +504,7 @@ class MarsLander(gym.Env, EzPickle):
         state = [
             # SkyCrane Data
             (pos.x - VIEWPORT_W/SCALE/2) / (VIEWPORT_W/SCALE/2), #0
-            (pos.y - (self.helipad_y+LEG_DOWN/SCALE)) / (VIEWPORT_H/SCALE/2), #1
+            (pos.y - (self.helipad_y+(LEG_DOWN+TETHER_LENGTH*1.1)/SCALE)) / (VIEWPORT_H/SCALE/2), #1
             vel.x*(VIEWPORT_W/SCALE/2)/FPS, #2
             vel.y*(VIEWPORT_H/SCALE/2)/FPS, #3
             self.skycrane.angle, #4
@@ -521,13 +522,15 @@ class MarsLander(gym.Env, EzPickle):
         ]
         assert len(state) == 15
         reward = 0
-        shaping = ( - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore # penalty for distance from helipad 
+        shaping = ( 
+            - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore # penalty for distance from helipad 
             - 100*np.sqrt(state[10]*state[10] + state[11]*state[11]) #type:ignore # penalty for speed 
             -  50*abs(state[4])  # penalty for skycrane angle
             + 10*state[6]        # reward for leg ground contacts
             + 10*state[7]        # reward for leg ground contacts
             - 70*abs(state[12]) # penalty for lander angle
             - 50*abs(state[13]) # penalty for lander rotational speed
+            - 50*np.sqrt(state[0]*state[0] + state[1]*state[1]) #type:ignore # penalty for skycrane distance from screen center
             )
 
             # And ten points for legs contact, the idea is if you
@@ -536,7 +539,7 @@ class MarsLander(gym.Env, EzPickle):
             reward = shaping - self.prev_shaping
         self.prev_shaping = shaping
 
-        reward -= m_power*0.30  # less fuel spent is better, about -30 for heuristic landing
+        reward -= m_power*0.10  # less fuel spent is better, about -30 for heuristic landing
         reward -= s_power*0.03
         
         reward += -5*tether_abuse # penalty for releasing tether before lander is on ground
