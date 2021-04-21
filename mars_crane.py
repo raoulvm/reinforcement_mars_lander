@@ -8,7 +8,7 @@ Based on the Lunar Lander (https://github.com/fakemonk1/Reinforcement-Learning-L
 
 
 Screencasting: 
-ffmpeg -f x11grab -show_region 1 -r 25 -s 600x400 -i :1+75,55 -c:v libx264 screencast.mp4
+ffmpeg -f x11grab -show_region 1 -r 25 -s 600x400 -i :1+75,55 -c:v libx264 sideengine.mp4
 
 """
 
