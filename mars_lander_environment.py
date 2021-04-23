@@ -552,15 +552,19 @@ class MarsLander(gym.Env, EzPickle):
         assert len(state) == 15
         reward = 0
         shaping = ( 
-            - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore # penalty for distance from helipad 
-            - 100*np.sqrt(state[10]*state[10] + state[11]*state[11]) #type:ignore # penalty for speed 
+            # penalty for lander  distance from helipad 
+            - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore 
+            
+            # penalty for lander speed
+            - 100*np.sqrt(state[10]*state[10] + state[11]*state[11]) #type:ignore  
+
             -  50*abs(state[4])  # penalty for skycrane angle
             -  70*abs(state[5]) # penalty for skycrane rotational velocity
             + 10*state[6]        # reward for leg ground contacts
             + 10*state[7]        # reward for leg ground contacts
             - 70*abs(state[12]) # penalty for lander angle
             - 100*abs(state[13]) # penalty for lander rotational speed
-            - 50*np.sqrt(state[0]*state[0] + state[1]*state[1]) #type:ignore # penalty for skycrane distance from screen center
+            - 50*np.sqrt(state[0]*state[0] + state[1]*state[1]) #type:ignore # penalty for skycrane distance from drop off position
             )
 
             # And ten points for legs contact, the idea is if you
