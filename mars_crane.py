@@ -84,7 +84,7 @@ class DQN:
             return
 
         # Early Stopping
-        if np.mean(self.rewards_list[-10:]) > 180:
+        if np.mean(self.rewards_list[-10:]) > 250:
             return
 
         random_sample = self.get_random_sample_from_replay_mem()
@@ -110,7 +110,17 @@ class DQN:
         random_sample = random.sample(self.replay_memory_buffer, self.batch_size)
         return random_sample
 
-    def train(self, num_episodes=2000, can_stop=True):
+    def train(self, num_episodes=2000, auto_stop_reward=250, checkpoint_intervall:int=False):
+        """Train the Deep Q Network
+
+        Args:
+            num_episodes (int, optional):   Maximum Number of Episodes. Defaults to 2000.
+            auto_stop_reward (int, optional): learning stops if moving average of 
+                last 100 rewards is this or above. Defaults to 250.
+                Set to 0 or False to disable.
+            checkpoint_intervall (int, optional): If > 0, the intervall in episodes to save model 
+                checkpoints (model.h5) files. Defaults to False.
+        """
         for episode in range(num_episodes):
             state = env.reset()
             reward_for_episode = 0
@@ -140,10 +150,13 @@ class DQN:
 
             # Check for breaking condition
             last_rewards_mean = np.mean(self.rewards_list[-100:])
-            if last_rewards_mean > 200 and can_stop:
+            if auto_stop_reward>0 and last_rewards_mean > auto_stop_reward:
                 print("DQN Training Complete...")
                 break
             print(episode, "\t: Episode || Reward: ",reward_for_episode, "\t|| Average Reward: ",last_rewards_mean, "\t epsilon: ", self.epsilon )
+            if checkpoint_intervall:
+                if episode>0 and episode % checkpoint_intervall==0:
+                    self.save(f"model_skycrane_checkpoint_episode{episode:06d}.h5")
 
     def update_counter(self):
         self.counter += 1
@@ -208,8 +221,8 @@ def plot_df2(df, chart_name, title, x_axis_label, y_axis_label):
     plot = df.plot(linewidth=1.5, figsize=(15, 8))
     plot.set_xlabel(x_axis_label)
     plot.set_ylabel(y_axis_label)
-    plt.ylim((0, 300))
-    plt.xlim((0, 100))
+    # plt.ylim((0, 300))
+    # plt.xlim((0, 100))
     plt.legend().set_visible(False)
     fig = plot.get_figure()
     fig.savefig(chart_name)
@@ -233,7 +246,7 @@ if __name__ == '__main__':
     model.train(training_episodes, True)
 
     # Save Everything
-    save_dir = "saved_models"
+    save_dir = "final_model_"
     # Save trained model
     model.save(save_dir + "trained_model.h5")
 
