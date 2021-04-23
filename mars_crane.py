@@ -8,7 +8,7 @@ Based on the Lunar Lander (https://github.com/fakemonk1/Reinforcement-Learning-L
 
 
 Screencasting: 
-ffmpeg -f x11grab -show_region 1 -r 25 -s 600x400 -i :1+75,55 -c:v libx264 sideengine.mp4
+ffmpeg -f x11grab -show_region 1 -r 25 -s 600x400 -i :1+75,55 -c:v libx264 mars_skycrane.mp4
 
 """
 
@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 from collections import deque
 import random
+from pyglet.gl.gl import GL_SAMPLES
 
 from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Dense
@@ -29,7 +30,7 @@ from mars_lander_environment import MarsLander
 
 import pickle
 from matplotlib import pyplot as plt
-
+from datetime import datetime, timedelta
 
 class DQN:
     def __init__(self, env, lr, gamma, epsilon, epsilon_decay):
@@ -56,6 +57,7 @@ class DQN:
         model = Sequential()
         model.add(Dense(512, input_dim=self.num_observation_space, activation=relu))
         model.add(Dense(256, activation=relu))
+        model.add(Dense(128, activation=relu))
         model.add(Dense(self.num_action_space, activation='linear'))
 
         # Compile the model
@@ -80,18 +82,18 @@ class DQN:
     def learn_and_update_weights_by_reply(self):
 
         # replay_memory_buffer size check
-        if len(self.replay_memory_buffer) < self.batch_size or self.counter != 0:
+        if len(self.replay_memory_buffer) < self.batch_size/10 or self.counter != 0: # TODO early learning: start at batch_size//x ?
             return
 
-        # Early Stopping
-        if np.mean(self.rewards_list[-10:]) > 250:
-            return
-
-        random_sample = self.get_random_sample_from_replay_mem()
+        # Early Stopping # why that??????????????????????? TODO
+        # if np.mean(self.rewards_list[-10:]) > 250:
+        #     return
+        samples = min(len(self.replay_memory_buffer),self.batch_size)
+        random_sample = self.get_random_sample_from_replay_mem(samples=samples)
         states, actions, rewards, next_states, done_list = self.get_attribues_from_sample(random_sample)
         targets = rewards + self.gamma * (np.amax(self.model.predict_on_batch(next_states), axis=1)) * (1 - done_list)
         target_vec = self.model.predict_on_batch(states)
-        indexes = np.array([i for i in range(self.batch_size)])
+        indexes = np.array([i for i in range(samples)])
         target_vec[[indexes], [actions]] = targets # type: ignore
 
         self.model.fit(states, target_vec, epochs=1, verbose=0)
@@ -106,11 +108,11 @@ class DQN:
         next_states = np.squeeze(next_states)
         return np.squeeze(states), actions, rewards, next_states, done_list
 
-    def get_random_sample_from_replay_mem(self):
-        random_sample = random.sample(self.replay_memory_buffer, self.batch_size)
+    def get_random_sample_from_replay_mem(self, samples):
+        random_sample = random.sample(self.replay_memory_buffer, samples)
         return random_sample
 
-    def train(self, num_episodes=2000, auto_stop_reward=250, checkpoint_intervall:int=False):
+    def train(self, num_episodes=2000, auto_stop_reward=250, checkpoint_intervall:int=False, start_episode:int=0):
         """Train the Deep Q Network
 
         Args:
@@ -121,7 +123,8 @@ class DQN:
             checkpoint_intervall (int, optional): If > 0, the intervall in episodes to save model 
                 checkpoints (model.h5) files. Defaults to False.
         """
-        for episode in range(num_episodes):
+        start_time = datetime.now()
+        for episode in range(start_episode, num_episodes+start_episode):
             state = env.reset()
             reward_for_episode = 0
             num_steps = 1000
@@ -153,10 +156,10 @@ class DQN:
             if auto_stop_reward>0 and last_rewards_mean > auto_stop_reward:
                 print("DQN Training Complete...")
                 break
-            print(episode, "\t: Episode || Reward: ",reward_for_episode, "\t|| Average Reward: ",last_rewards_mean, "\t epsilon: ", self.epsilon )
+            print(f"{datetime.now()-start_time} Episode:{episode:5d} Reward:{reward_for_episode:10.3f} Average Reward:{last_rewards_mean:10.3f} epsilon: {self.epsilon:6.3%}")
             if checkpoint_intervall:
                 if episode>0 and episode % checkpoint_intervall==0:
-                    self.save(f"model_skycrane_checkpoint_episode{episode:06d}.h5")
+                    self.save(f"model3_skycrane_checkpoint_episode{episode:06d}.h5")
 
     def update_counter(self):
         self.counter += 1
@@ -228,8 +231,9 @@ def plot_df2(df, chart_name, title, x_axis_label, y_axis_label):
     fig.savefig(chart_name)
 
 
+
 if __name__ == '__main__':
-    env = MarsLander(tether_action=True) #gym.make('LunarLander-v2')
+    env = MarsLander(tether_action=True, render_reward_indicator=True) #gym.make('LunarLander-v2')
 
     # set seeds
     env.seed(21)
@@ -240,10 +244,27 @@ if __name__ == '__main__':
     epsilon = 1.0
     epsilon_decay = 0.995
     gamma = 0.99
-    training_episodes = 2000
+    training_episodes = 3000
+    start_episode = 0
     print('Start')
     model = DQN(env, lr, gamma, epsilon, epsilon_decay)
-    model.train(training_episodes, True)
+
+    restart_model_episode = None #600
+
+    
+
+    if not restart_model_episode is None:
+        model.epsilon = epsilon * epsilon_decay**restart_model_episode
+        training_episodes = 3000 - restart_model_episode
+        model.model.load_weights(f"model_skycrane_checkpoint_episode{restart_model_episode:06d}.h5")
+        start_episode = restart_model_episode
+
+    model.train(
+        num_episodes=training_episodes, 
+        auto_stop_reward=250,
+        checkpoint_intervall=50,
+        start_episode=start_episode
+        )
 
     # Save Everything
     save_dir = "final_model_"
