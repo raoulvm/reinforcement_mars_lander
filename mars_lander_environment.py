@@ -56,10 +56,16 @@ on its first attempt. Please see the source code for details.
 
 
 BASED ON
-
 LunarLander-v2
 Created by Oleg Klimov. Licensed on the same terms as the rest of OpenAI Gym.
 Copied from openai.gym
+
+Changelog
+Additional GAME OVER conditions - max angle of bodies 90 DEG either way
+
+
+
+
 """
 
 
@@ -68,7 +74,7 @@ import numpy as np
 
 import Box2D
 from Box2D.b2 import (edgeShape, circleShape, fixtureDef, # type: ignore
-    polygonShape, revoluteJointDef, contactListener, distanceJointDef) # type: ignore
+    polygonShape, revoluteJointDef, contactListener, distanceJointDef, ropeJointDef) # type: ignore
 
 
 import gym
@@ -90,7 +96,7 @@ LANDER_POLY =[
 LEG_AWAY = 20
 LEG_DOWN = 18
 LEG_W, LEG_H = 2, 8
-LEG_SPRING_TORQUE = 30
+LEG_SPRING_TORQUE = 50
 
 TETHER_LENGTH = 64
 SKYCRANE_POLY =[
@@ -152,9 +158,7 @@ class MarsLander(gym.Env, EzPickle):
         4: 'release tether',
     }
 
-    continuous = False
-
-    def __init__(self, gravitympss:float=3.721, tether_action:bool=False):
+    def __init__(self, gravitympss:float=3.721, tether_action:bool=False, render_reward_indicator:bool=False):
         EzPickle.__init__(self)
         self.seed()
         self.viewer = None
@@ -166,21 +170,14 @@ class MarsLander(gym.Env, EzPickle):
         self.particles = []
 
         self.prev_reward = None
-
+        self.render_reward_indicator = render_reward_indicator
         # useful range is -1 .. +1, but spikes can be higher
         self.observation_space = spaces.Box(-np.inf, np.inf, shape=(15,), dtype=np.float32)
 
-        if self.continuous:
-            raise NotImplementedError("Continous Mode on Mars is not implemented")
-            # Action is two floats [main engine, left-right engines].
-            # Main engine: -1..0 off, 0..+1 throttle from 50% to 100% power. Engine can't work with less than 50% power.
-            # Left-right:  -1.0..-0.5 fire left engine, +0.5..+1.0 fire right engine, -0.5..0.5 off
-            self.action_space = spaces.Box(-1, +1, (2,), dtype=np.float32)
+        if tether_action:
+            self.action_space = spaces.Discrete(5)
         else:
-            if tether_action:
-                self.action_space = spaces.Discrete(5)
-            else:
-                self.action_space = spaces.Discrete(4)
+            self.action_space = spaces.Discrete(4)
 
         self.reset()
 
@@ -235,7 +232,7 @@ class MarsLander(gym.Env, EzPickle):
             self.moon.CreateEdgeFixture(
                 vertices=[p1,p2],
                 density=0,
-                friction=0.1)
+                friction=0.5)
             self.sky_polys.append([p1, p2, (p2[0], H), (p1[0], H)])
 
         self.moon.color1 = (0.5, 0.0, 0.0)
@@ -245,7 +242,7 @@ class MarsLander(gym.Env, EzPickle):
         ########################
         # The SkyCrane
         #
-        # The SkyCrane that carries the lander on a tether (Box2D: rope)
+        # The SkyCrane that carries the lander on a tether (Box2D: distance or rope joint)
         ########################
 
         initial_y = VIEWPORT_H/SCALE
@@ -329,21 +326,44 @@ class MarsLander(gym.Env, EzPickle):
         #
         ##########################
 
-        tetherdef = distanceJointDef(
+        tetherdef = ropeJointDef(
             bodyA=self.lander,
             bodyB=self.skycrane,
-            localAnchorA=(0, 14/SCALE),
-            localAnchorB=(0, 0),
-            length=TETHER_LENGTH/SCALE,
-            frequencyHz=FPS,
-            dampingRatio=0.2,
+            localAnchorA=(0, 17/SCALE),
+            localAnchorB=(0,-10/SCALE),
+            maxLength=TETHER_LENGTH/SCALE,
+            #frequencyHz=FPS,
+            #dampingRatio=0.2,
+            collideConnected=True,
         )
         
         self.skycrane.joint = self.world.CreateJoint(tetherdef)
         self.tether_connected = 1
+
+        # ##########################
+        # # Dynamic Reward Indicators
+        # ##########################
+
+        # self.actual_reward_indicator = self.world.CreateDynamicBody(
+        #     position=(VIEWPORT_W/SCALE/2, VIEWPORT_H-20/SCALE),
+        #     angle=0.0,
+        #     fixtures = fixtureDef(
+        #         shape=polygonShape(vertices=[(x/SCALE, y/SCALE) for x, y in [
+        #             (0,10),(10,0),(0,-10),(-10,0)
+        #         ]]),
+        #         density=1.0,
+        #         friction=0.1,
+        #         categoryBits=0x0000,
+        #         maskBits=0x0000,   # collide only with ground and skycrane
+        #         restitution=0.0)  # 0.99 bouncy
+        #         )
+        # self.actual_reward_indicator.color1 = (1.0, 0.1, 0.1)
+        # self.actual_reward_indicator.color2 = (1.0, 0.1, 0.9)
+
+
         self.drawlist = [self.lander, self.skycrane] + self.legs
 
-        return self.step(np.array([0, 0]) if self.continuous else 0)[0]
+        return self.step(0)[0]
 
     def _create_particle(self, mass, x, y, ttl):
         p = self.world.CreateDynamicBody(
@@ -367,10 +387,7 @@ class MarsLander(gym.Env, EzPickle):
             self.world.DestroyBody(self.particles.pop(0))
 
     def step(self, action):
-        if self.continuous:
-            action = np.clip(action, -1, +1).astype(np.float32)
-        else:
-            assert self.action_space.contains(action), "%r (%s) invalid " % (action, type(action))
+        assert self.action_space.contains(action), "%r (%s) invalid " % (action, type(action))
 
         # Engines
 
@@ -395,7 +412,7 @@ class MarsLander(gym.Env, EzPickle):
             [math.cos(thruster_angles[0])/SCALE, math.sin(thruster_angles[0])/SCALE],
             [math.cos(thruster_angles[1])/SCALE, math.sin(thruster_angles[1])/SCALE],
         ]
-        if (self.continuous and action[0] > 0.0) or (not self.continuous and action in [1,2,3]):
+        if action in [1,2,3]:
             # was: Main engine
             # Fire both engines half
 
@@ -414,15 +431,10 @@ class MarsLander(gym.Env, EzPickle):
             # self.skycrane.angle+pi/2 -/+ SIDE_ENGINE_ANGLE
 
 
-
-            if self.continuous:
-                m_power = (np.clip(action[0], 0.0,1.0) + 1.0)*0.5   # 0.5..1.0
-                assert m_power >= 0.5 and m_power <= 1.0
+            if action == 2:
+                m_power = 1.0 * HALF_ENGINE_POWER/FULL_ENGINE_POWER
             else:
-                if action == 2:
-                    m_power = 1.0 * HALF_ENGINE_POWER/FULL_ENGINE_POWER
-                else:
-                    m_power = 1.0 # FULL POWER
+                m_power = 1.0 # FULL POWER
 
             # ox,oy = Offset X, Y
             # engine 1
@@ -485,7 +497,7 @@ class MarsLander(gym.Env, EzPickle):
 
         s_power = 0.0
         tether_abuse = False
-        if not self.continuous and action==4: 
+        if action==4: 
             # RELEASE TETHER
             if self.tether_connected==1:
                 if self.legs[0].ground_contact+self.legs[1].ground_contact > 0:
@@ -504,11 +516,11 @@ class MarsLander(gym.Env, EzPickle):
         state = [
             # SkyCrane Data
             (pos.x - VIEWPORT_W/SCALE/2) / (VIEWPORT_W/SCALE/2), #0
-            (pos.y - (self.helipad_y+(LEG_DOWN+TETHER_LENGTH*1.1)/SCALE)) / (VIEWPORT_H/SCALE/2), #1
+            (pos.y - (self.helipad_y+(LEG_DOWN+TETHER_LENGTH*1.3)/SCALE)) / (VIEWPORT_H/SCALE/2), #1
             vel.x*(VIEWPORT_W/SCALE/2)/FPS, #2
             vel.y*(VIEWPORT_H/SCALE/2)/FPS, #3
             self.skycrane.angle, #4
-            20.0*self.skycrane.angularVelocity/FPS, #5
+            20.0*self.skycrane.angularVelocity/FPS, #5 Squared Angular velocity to punish rotation
             # Lander Data
             1.0 if self.legs[0].ground_contact else 0.0, #6
             1.0 if self.legs[1].ground_contact else 0.0, #7
@@ -523,14 +535,19 @@ class MarsLander(gym.Env, EzPickle):
         assert len(state) == 15
         reward = 0
         shaping = ( 
-            - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore # penalty for distance from helipad 
-            - 100*np.sqrt(state[10]*state[10] + state[11]*state[11]) #type:ignore # penalty for speed 
+            # penalty for lander  distance from helipad 
+            - 100*np.sqrt(state[8]*state[8] + state[9]*state[9]) #type:ignore 
+            
+            # penalty for lander speed
+            - 100*np.sqrt(state[10]*state[10] + state[11]*state[11]) #type:ignore  
+
             -  50*abs(state[4])  # penalty for skycrane angle
+            -  70*abs(state[5]) # penalty for skycrane rotational velocity
             + 10*state[6]        # reward for leg ground contacts
             + 10*state[7]        # reward for leg ground contacts
             - 70*abs(state[12]) # penalty for lander angle
-            - 50*abs(state[13]) # penalty for lander rotational speed
-            - 50*np.sqrt(state[0]*state[0] + state[1]*state[1]) #type:ignore # penalty for skycrane distance from screen center
+            - 100*abs(state[13]) # penalty for lander rotational speed
+            - 50*np.sqrt(state[0]*state[0] + state[1]*state[1]) #type:ignore # penalty for skycrane distance from drop off position
             )
 
             # And ten points for legs contact, the idea is if you
@@ -539,23 +556,42 @@ class MarsLander(gym.Env, EzPickle):
             reward = shaping - self.prev_shaping
         self.prev_shaping = shaping
 
-        reward -= m_power*0.10  # less fuel spent is better, about -30 for heuristic landing
-        reward -= s_power*0.03
+        reward -= m_power*0.10  # less fuel spent is better,
         
         reward += -5*tether_abuse # penalty for releasing tether before lander is on ground
-        
-
+        #print(dir(self.actual_reward_indicator))
+        #self.actual_reward_indicator.transform(((VIEWPORT_W+reward)/SCALE, self.actual_reward_indicator.position.y),0)
+        #self.actual_reward_indicator.position.x = (VIEWPORT_W+reward)/SCALE
+        self.last_reward = reward
 
         done = False
-        if self.game_over or abs(state[8]) >= 1.0: # sudden flay-away: if the lander is off-screen
+
+        ####################
+        # Extra Game Over Conditions - Except for crashing into the Mars
+        #
+        ###################
+
+        if abs(state[8]) >= 1.0: # sudden fly-away: if the lander is off-screen
+            self.game_over = True
+
+        if abs(self.lander.angle) >= math.pi/2: # lander would be destroy by rope
+            self.game_over = True
+        
+        if abs(self.skycrane.angle) >= math.pi/2: # skycrane would be destroy by rope
+            self.game_over = True
+
+
+        ####################
+
+
+
+        if self.game_over: 
             done = True
             reward = -100
-            #print('Terminal velocity:', state[11])
-            # if abs(state[11])>1e-10:
-            #     reward += -200
+
         if not self.lander.awake:
             done = True
-            reward = +100
+            reward = +200
             print('Landing Award granted')
             #print('Terminal velocity:', state[11])
         return np.array(state, dtype=np.float32), reward, done, {}
@@ -565,6 +601,7 @@ class MarsLander(gym.Env, EzPickle):
         if self.viewer is None:
             self.viewer = rendering.Viewer(VIEWPORT_W, VIEWPORT_H)
             self.viewer.set_bounds(0, VIEWPORT_W/SCALE, 0, VIEWPORT_H/SCALE)
+            
 
         for obj in self.particles:
             obj.ttl -= 0.15
@@ -573,9 +610,19 @@ class MarsLander(gym.Env, EzPickle):
 
         self._clean_particles(False)
 
+        # RED PLANET BACKGROUND
+        self.viewer.draw_polygon(
+            [(0,0), (self.viewer.width,0), (self.viewer.width, self.viewer.height,0), (0,self.viewer.height)], 
+            color=(0.8, 0, 0)) # thanks go to Nico
+
         for p in self.sky_polys:
             self.viewer.draw_polygon(p, color=(0, 0, 0))
-
+       # Tether
+        if self.tether_connected:
+            self.viewer.draw_polyline([
+                self.lander.GetWorldPoint((0,17/SCALE)), self.skycrane.GetWorldPoint((0,-10/SCALE))
+            ], color=(0.8,0.1,0.0)
+            )
         for obj in self.particles + self.drawlist:
             for f in obj.fixtures:
                 trans = f.body.transform
@@ -588,6 +635,7 @@ class MarsLander(gym.Env, EzPickle):
                     self.viewer.draw_polygon(path, color=obj.color1)
                     path.append(path[0])
                     self.viewer.draw_polyline(path, color=obj.color2, linewidth=2)
+ 
 
         for x in [self.helipad_x1, self.helipad_x2]:
             flagy1 = self.helipad_y
@@ -595,6 +643,13 @@ class MarsLander(gym.Env, EzPickle):
             self.viewer.draw_polyline([(x, flagy1), (x, flagy2)], color=(1, 1, 1))
             self.viewer.draw_polygon([(x, flagy2), (x, flagy2-10/SCALE), (x + 25/SCALE, flagy2 - 5/SCALE)],
                                      color=(0.8, 0.8, 0))
+
+        # reward indicator
+        if self.render_reward_indicator:
+            x = self.last_reward + VIEWPORT_W/2/SCALE
+            ind_y = 30/SCALE 
+            self.viewer.draw_polygon([(x, ind_y-20/SCALE), (VIEWPORT_W/2/SCALE, ind_y-20/SCALE), (VIEWPORT_W/2/SCALE, ind_y)],
+                                        color=(0.9, 0.9, 0.9))        
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
