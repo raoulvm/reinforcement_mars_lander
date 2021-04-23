@@ -61,7 +61,7 @@ Created by Oleg Klimov. Licensed on the same terms as the rest of OpenAI Gym.
 Copied from openai.gym
 
 Changelog
-
+Additional GAME OVER conditions - max angle of bodies 90 DEG either way
 
 
 
@@ -588,10 +588,10 @@ class MarsLander(gym.Env, EzPickle):
         if abs(state[8]) >= 1.0: # sudden fly-away: if the lander is off-screen
             self.game_over = True
 
-        if abs(self.lander.angle) >= math.pi/2: # lander would be destroy on rope
+        if abs(self.lander.angle) >= math.pi/2: # lander would be destroy by rope
             self.game_over = True
         
-        if abs(self.skycrane.angle) >= math.pi/2: # lander would be destroy on rope
+        if abs(self.skycrane.angle) >= math.pi/2: # skycrane would be destroy by rope
             self.game_over = True
 
 
@@ -602,9 +602,7 @@ class MarsLander(gym.Env, EzPickle):
         if self.game_over: 
             done = True
             reward = -100
-            #print('Terminal velocity:', state[11])
-            # if abs(state[11])>1e-10:
-            #     reward += -200
+
         if not self.lander.awake:
             done = True
             reward = +200
