@@ -158,8 +158,6 @@ class MarsLander(gym.Env, EzPickle):
         4: 'release tether',
     }
 
-    continuous = False
-
     def __init__(self, gravitympss:float=3.721, tether_action:bool=False, render_reward_indicator:bool=False):
         EzPickle.__init__(self)
         self.seed()
@@ -176,17 +174,10 @@ class MarsLander(gym.Env, EzPickle):
         # useful range is -1 .. +1, but spikes can be higher
         self.observation_space = spaces.Box(-np.inf, np.inf, shape=(15,), dtype=np.float32)
 
-        if self.continuous:
-            raise NotImplementedError("Continous Mode on Mars is not implemented")
-            # Action is two floats [main engine, left-right engines].
-            # Main engine: -1..0 off, 0..+1 throttle from 50% to 100% power. Engine can't work with less than 50% power.
-            # Left-right:  -1.0..-0.5 fire left engine, +0.5..+1.0 fire right engine, -0.5..0.5 off
-            self.action_space = spaces.Box(-1, +1, (2,), dtype=np.float32)
+        if tether_action:
+            self.action_space = spaces.Discrete(5)
         else:
-            if tether_action:
-                self.action_space = spaces.Discrete(5)
-            else:
-                self.action_space = spaces.Discrete(4)
+            self.action_space = spaces.Discrete(4)
 
         self.reset()
 
@@ -372,7 +363,7 @@ class MarsLander(gym.Env, EzPickle):
 
         self.drawlist = [self.lander, self.skycrane] + self.legs
 
-        return self.step(np.array([0, 0]) if self.continuous else 0)[0]
+        return self.step(0)[0]
 
     def _create_particle(self, mass, x, y, ttl):
         p = self.world.CreateDynamicBody(
@@ -396,10 +387,7 @@ class MarsLander(gym.Env, EzPickle):
             self.world.DestroyBody(self.particles.pop(0))
 
     def step(self, action):
-        if self.continuous:
-            action = np.clip(action, -1, +1).astype(np.float32)
-        else:
-            assert self.action_space.contains(action), "%r (%s) invalid " % (action, type(action))
+        assert self.action_space.contains(action), "%r (%s) invalid " % (action, type(action))
 
         # Engines
 
@@ -424,7 +412,7 @@ class MarsLander(gym.Env, EzPickle):
             [math.cos(thruster_angles[0])/SCALE, math.sin(thruster_angles[0])/SCALE],
             [math.cos(thruster_angles[1])/SCALE, math.sin(thruster_angles[1])/SCALE],
         ]
-        if (self.continuous and action[0] > 0.0) or (not self.continuous and action in [1,2,3]):
+        if action in [1,2,3]:
             # was: Main engine
             # Fire both engines half
 
@@ -443,15 +431,10 @@ class MarsLander(gym.Env, EzPickle):
             # self.skycrane.angle+pi/2 -/+ SIDE_ENGINE_ANGLE
 
 
-
-            if self.continuous:
-                m_power = (np.clip(action[0], 0.0,1.0) + 1.0)*0.5   # 0.5..1.0
-                assert m_power >= 0.5 and m_power <= 1.0
+            if action == 2:
+                m_power = 1.0 * HALF_ENGINE_POWER/FULL_ENGINE_POWER
             else:
-                if action == 2:
-                    m_power = 1.0 * HALF_ENGINE_POWER/FULL_ENGINE_POWER
-                else:
-                    m_power = 1.0 # FULL POWER
+                m_power = 1.0 # FULL POWER
 
             # ox,oy = Offset X, Y
             # engine 1
@@ -514,7 +497,7 @@ class MarsLander(gym.Env, EzPickle):
 
         s_power = 0.0
         tether_abuse = False
-        if not self.continuous and action==4: 
+        if action==4: 
             # RELEASE TETHER
             if self.tether_connected==1:
                 if self.legs[0].ground_contact+self.legs[1].ground_contact > 0:
@@ -573,8 +556,7 @@ class MarsLander(gym.Env, EzPickle):
             reward = shaping - self.prev_shaping
         self.prev_shaping = shaping
 
-        reward -= m_power*0.10  # less fuel spent is better, about -30 for heuristic landing
-        #reward -= s_power*0.03
+        reward -= m_power*0.10  # less fuel spent is better,
         
         reward += -5*tether_abuse # penalty for releasing tether before lander is on ground
         #print(dir(self.actual_reward_indicator))
