@@ -4,6 +4,8 @@ Based on openai.com's LunarLander [gym](https://github.com/openai/gym), the
 
  is an increased challenge for reinforcement learning.
 
+![Screenshot](https://github.com/raoulvm/reinforcement_mars_lander/blob/main/Screenshot%20Arean%20Lander.png?raw=true)
+
 As [NASA did with Perseverance](https://en.wikipedia.org/wiki/Mars_2020), the lander this time has to be dropped of by a 
 SkyCrane like EDLS - a rocket propelled crane platform that carries its payload to the surface,
 to set it down safely and then leave the area.
@@ -45,4 +47,13 @@ Challenges:
 You need to get [Box2d](https://box2d.org/) running on your envirnment. Easy on Linux, a challenge on Windows, and ah, duh, don't know about MacOS.
 And you need open.ai Gym with `pip install gym` and tensorflow if you want to run the prepared reinforcement model.
 
+## Usage
 
+Either clone the whole repository, or just copy 
+* mars_lander_environment.py  
+  This is the gym-derived and gym-compatible environment
+  
+* mars_lander
+  This is a prepared agent implementation to learn to land safely on Mars. You might of course implement your own. This Agent is based on [fakemonk1's Lunar Lander](https://github.com/fakemonk1/Reinforcement-Learning-Lunar_Lander), all kudos go to her/him.
+  
+  
