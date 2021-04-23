@@ -242,7 +242,7 @@ class MarsLander(gym.Env, EzPickle):
         ########################
         # The SkyCrane
         #
-        # The SkyCrane that carries the lander on a tether (Box2D: distance joint)
+        # The SkyCrane that carries the lander on a tether (Box2D: distance or rope joint)
         ########################
 
         initial_y = VIEWPORT_H/SCALE
