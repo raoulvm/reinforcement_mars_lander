@@ -332,11 +332,12 @@ class MarsLander(gym.Env, EzPickle):
         tetherdef = ropeJointDef(
             bodyA=self.lander,
             bodyB=self.skycrane,
-            localAnchorA=(0, 14/SCALE),
-            localAnchorB=(0, 0),
+            localAnchorA=(0, 17/SCALE),
+            localAnchorB=(0,-10/SCALE),
             maxLength=TETHER_LENGTH/SCALE,
             #frequencyHz=FPS,
             #dampingRatio=0.2,
+            collideConnected=True,
         )
         
         self.skycrane.joint = self.world.CreateJoint(tetherdef)
@@ -606,7 +607,12 @@ class MarsLander(gym.Env, EzPickle):
 
         for p in self.sky_polys:
             self.viewer.draw_polygon(p, color=(0, 0, 0))
-
+       # Tether
+        if self.tether_connected:
+            self.viewer.draw_polyline([
+                self.lander.GetWorldPoint((0,17/SCALE)), self.skycrane.GetWorldPoint((0,-10/SCALE))
+            ], color=(0.8,0.1,0.0)
+            )
         for obj in self.particles + self.drawlist:
             for f in obj.fixtures:
                 trans = f.body.transform
@@ -619,6 +625,7 @@ class MarsLander(gym.Env, EzPickle):
                     self.viewer.draw_polygon(path, color=obj.color1)
                     path.append(path[0])
                     self.viewer.draw_polyline(path, color=obj.color2, linewidth=2)
+ 
 
         for x in [self.helipad_x1, self.helipad_x2]:
             flagy1 = self.helipad_y
