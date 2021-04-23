@@ -56,10 +56,16 @@ on its first attempt. Please see the source code for details.
 
 
 BASED ON
-
 LunarLander-v2
 Created by Oleg Klimov. Licensed on the same terms as the rest of OpenAI Gym.
 Copied from openai.gym
+
+Changelog
+
+
+
+
+
 """
 
 
@@ -90,7 +96,7 @@ LANDER_POLY =[
 LEG_AWAY = 20
 LEG_DOWN = 18
 LEG_W, LEG_H = 2, 8
-LEG_SPRING_TORQUE = 30
+LEG_SPRING_TORQUE = 50
 
 TETHER_LENGTH = 64
 SKYCRANE_POLY =[
@@ -573,7 +579,27 @@ class MarsLander(gym.Env, EzPickle):
         self.last_reward = reward
 
         done = False
-        if self.game_over or abs(state[8]) >= 1.0: # sudden fly-away: if the lander is off-screen
+
+        ####################
+        # Extra Game Over Conditions - Except for crashing into the Mars
+        #
+        ###################
+
+        if abs(state[8]) >= 1.0: # sudden fly-away: if the lander is off-screen
+            self.game_over = True
+
+        if abs(self.lander.angle) >= math.pi/2: # lander would be destroy on rope
+            self.game_over = True
+        
+        if abs(self.skycrane.angle) >= math.pi/2: # lander would be destroy on rope
+            self.game_over = True
+
+
+        ####################
+
+
+
+        if self.game_over: 
             done = True
             reward = -100
             #print('Terminal velocity:', state[11])
@@ -581,7 +607,7 @@ class MarsLander(gym.Env, EzPickle):
             #     reward += -200
         if not self.lander.awake:
             done = True
-            reward = +100
+            reward = +200
             print('Landing Award granted')
             #print('Terminal velocity:', state[11])
         return np.array(state, dtype=np.float32), reward, done, {}
